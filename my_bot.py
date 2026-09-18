@@ -48,6 +48,8 @@ except ValueError:
     ADMIN_ID = None
 
 bot = telebot.TeleBot(API_TOKEN)
+telebot.apihelper.READ_TIMEOUT = 600
+telebot.apihelper.CONNECT_TIMEOUT = 120
 
 DOWNLOAD_FOLDER = "downloads"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
@@ -460,9 +462,9 @@ def get_video_duration(file_path: str) -> float:
     return 0.0
 
 
-def compress_video_for_telegram(input_path: str, target_mb: float = 45.0) -> str | None:
+def compress_video_for_telegram(input_path: str, target_mb: float = 28.0) -> str | None:
     """
-    Smart compressor: compresses video with H.264 so it stays under Telegram's 50MB limit (~45MB)
+    Smart compressor: compresses video with H.264 so it stays under Telegram's 50MB limit (~28MB)
     while preserving high visual clarity.
     Returns the path to the compressed file if successful, or None.
     """
@@ -474,7 +476,7 @@ def compress_video_for_telegram(input_path: str, target_mb: float = 45.0) -> str
         return input_path
 
     duration = get_video_duration(input_path)
-    # If video is > 15 minutes (900 seconds), compressing down to 45MB will hurt quality too much.
+    # If video is > 15 minutes (900 seconds), compressing down to 28MB will hurt quality too much.
     if duration > 900:
         print(f"[COMPRESS SKIP] Video duration {duration:.0f}s > 900s. Better to watch on HappyHub.")
         return None
@@ -497,7 +499,7 @@ def compress_video_for_telegram(input_path: str, target_mb: float = 45.0) -> str
             "-b:v", f"{video_kbps}k",
             "-maxrate", f"{int(video_kbps * 1.3)}k",
             "-bufsize", f"{int(video_kbps * 2)}k",
-            "-vf", "scale='min(1280,iw)':-2",
+            "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
             "-c:a", "aac",
             "-b:a", f"{audio_kbps}k",
             "-movflags", "+faststart",
@@ -773,7 +775,7 @@ def download_video(message):
 
         bot.edit_message_text(
             f"🔄 វីដេអូមានទំហំ ({size_mb:.1f} MB > 50MB)\n"
-            f"⚡ កំពុង Smart-Compress បង្រួមមក ~45MB កម្រិត 720p HD ដើម្បីផ្ញើចូល Telegram...",
+            f"⚡ កំពុង Smart-Compress បង្រួមមក ~28MB កម្រិត 720p HD ដើម្បីផ្ញើចូល Telegram...",
             message.chat.id, msg.message_id
         )
         comp_file = compress_video_for_telegram(file_path)
@@ -810,7 +812,7 @@ def download_video(message):
                 bot.send_video(
                     message.chat.id,
                     video,
-                    timeout=180,
+                    timeout=600,
                     supports_streaming=True,
                     caption=f"✅ {send_size_mb:.1f} MB | {platform.upper()} | MP4{caption_suffix}",
                     parse_mode="Markdown"
@@ -818,6 +820,7 @@ def download_video(message):
             upload_ok = True
             break
         except Exception as upload_err:
+            print(f"[UPLOAD ATTEMPT {attempt+1} ERROR] {upload_err}")
             if attempt == 2:
                 msg_text = f"❌ Telegram Upload បរាជ័យ: {str(upload_err)[:100]}"
                 if watch_url:
