@@ -935,5 +935,11 @@ def download_video(message):
 
 
 if __name__ == "__main__":
+    import time
     print("🤖 HappyHub Video Downloader & Auto-Poster Bot is running...")
-    bot.infinity_polling()
+    while True:
+        try:
+            bot.infinity_polling(timeout=25, long_polling_timeout=25)
+        except Exception as poll_err:
+            print(f"[POLL RECONNECTING] {poll_err}")
+            time.sleep(3)
