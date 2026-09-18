@@ -1,0 +1,9 @@
+﻿.env
+.env*
+__pycache__/
+downloads/
+*.pyc
+users.json
+*_cookies.txt
+cookies.txt
+*.log
