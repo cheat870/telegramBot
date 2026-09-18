@@ -1,4 +1,4 @@
-name: Run Telegram Bot
+name: Telegram Bot CI
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  run-bot:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +22,13 @@ jobs:
       run: |
         pip install -r requirements.txt
 
-    - name: 🔐 Set environment variables
+    - name: 🧪 Verify Python Code Syntax
+      run: |
+        python -m py_compile my_bot.py
+        python -m py_compile bot_download.py
+
+    - name: ▶️ Run Bot (Manual Dispatch Only)
+      if: ${{ github.event_name == 'workflow_dispatch' && secrets.BOT_TOKEN != '' }}
       run: |
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
         echo "LOG_CHANNEL_ID=${{ secrets.LOG_CHANNEL_ID }}" >> .env
@@ -30,7 +36,4 @@ jobs:
         echo "HAPPYHUB_API_URL=${{ secrets.HAPPYHUB_API_URL }}" >> .env
         echo "HAPPYHUB_EMAIL=${{ secrets.HAPPYHUB_EMAIL }}" >> .env
         echo "HAPPYHUB_PASSWORD=${{ secrets.HAPPYHUB_PASSWORD }}" >> .env
-
-    - name: ▶️ Run Bot
-      run: |
         python my_bot.py
