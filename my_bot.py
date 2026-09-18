@@ -179,8 +179,34 @@ def log_download(user, url: str, status: str, platform: str = "?", size_mb: floa
 #  HAPPYHUB AUTO-POST SERVICE
 # ═════════════════════════════════════════════
 
+def extract_thumbnail_from_video(video_path: str) -> str | None:
+    """Extracts a JPEG snapshot at 00:00:02 using imageio_ffmpeg."""
+    thumb_path = os.path.splitext(video_path)[0] + "_thumb.jpg"
+    try:
+        ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-ss", "00:00:02",
+            "-i", video_path,
+            "-vframes", "1",
+            "-q:v", "2",
+            thumb_path
+        ]
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+        if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+            return thumb_path
+        # Fallback to second 0 if second 2 failed
+        cmd[3] = "00:00:00"
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+        if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+            return thumb_path
+    except Exception as e:
+        print(f"[THUMB ERROR] {e}")
+    return None
+
+
 def post_to_happyhub(file_path: str, title: str, platform: str, description: str = "") -> str | None:
-    """Uploads downloaded video directly to Cloudflare R2 and posts it to HappyHub."""
+    """Uploads downloaded video directly to Cloudflare R2 and posts it to HappyHub with thumbnail and duration."""
     try:
         session = requests.Session()
         # 1. Login to HappyHub
@@ -198,7 +224,50 @@ def post_to_happyhub(file_path: str, title: str, platform: str, description: str
         file_name = os.path.basename(file_path)
         clean_name = re.sub(r"[^a-zA-Z0-9._-]+", "_", file_name)[-80:] or "video.mp4"
 
-        # 2. Request presigned upload URL from HappyHub backend
+        # 2. Extract & Upload thumbnail directly to Cloudflare R2
+        thumbnail_url = None
+        thumb_path = extract_thumbnail_from_video(file_path)
+        if thumb_path and os.path.exists(thumb_path):
+            try:
+                thumb_size = os.path.getsize(thumb_path)
+                thumb_name = os.path.basename(thumb_path)
+                clean_thumb_name = re.sub(r"[^a-zA-Z0-9._-]+", "_", thumb_name)[-80:] or "thumb.jpg"
+                presign_thumb_res = session.post(
+                    f"{HAPPYHUB_API_URL}/upload/presigned-url",
+                    json={
+                        "kind": "thumbnail",
+                        "fileName": clean_thumb_name,
+                        "fileType": "image/jpeg",
+                        "fileSize": thumb_size,
+                    },
+                    headers={"Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest"},
+                    timeout=20,
+                )
+                if presign_thumb_res.status_code == 200:
+                    thumb_data = presign_thumb_res.json()
+                    thumb_upload_url = thumb_data.get("uploadUrl")
+                    thumb_public_url = thumb_data.get("publicUrl")
+                    if thumb_upload_url and thumb_public_url:
+                        with open(thumb_path, "rb") as tf:
+                            up_t = requests.put(
+                                thumb_upload_url,
+                                data=tf,
+                                headers={"Content-Type": "image/jpeg"},
+                                timeout=60,
+                            )
+                        if up_t.status_code in (200, 201):
+                            thumbnail_url = thumb_public_url
+                            print(f"[HAPPYHUB] Thumbnail uploaded: {thumbnail_url}")
+            except Exception as te:
+                print(f"[HAPPYHUB THUMB UPLOAD ERROR] {te}")
+            finally:
+                if os.path.exists(thumb_path):
+                    try:
+                        os.remove(thumb_path)
+                    except OSError:
+                        pass
+
+        # 3. Request presigned upload URL from HappyHub backend
         presign_res = session.post(
             f"{HAPPYHUB_API_URL}/upload/presigned-url",
             json={
@@ -221,7 +290,7 @@ def post_to_happyhub(file_path: str, title: str, platform: str, description: str
         if not upload_url or not storage_key:
             return None
 
-        # 3. Stream video file directly to Cloudflare R2
+        # 4. Stream video file directly to Cloudflare R2
         with open(file_path, "rb") as f:
             upload_res = requests.put(
                 upload_url,
@@ -233,19 +302,28 @@ def post_to_happyhub(file_path: str, title: str, platform: str, description: str
             print(f"[HAPPYHUB] R2 stream upload failed with status {upload_res.status_code}")
             return None
 
-        # 4. Finalize post registration on HappyHub
+        # 5. Finalize post registration on HappyHub
         final_title = (title or "Telegram Downloaded Video").strip()[:100]
         final_desc = description or f"Auto-downloaded from {platform.upper()} via Telegram Bot"
         tags = [platform.lower(), "telegram", "viral", "happyhub"]
+        duration = get_video_duration(file_path)
+
+        payload = {
+            "storageKey": storage_key,
+            "title": final_title,
+            "description": final_desc,
+            "tags": tags,
+        }
+        if thumbnail_url:
+            payload["thumbnailUrl"] = thumbnail_url
+        if duration and duration > 0:
+            payload["duration"] = int(duration)
+        if file_size and file_size > 0:
+            payload["fileSize"] = int(file_size)
 
         complete_res = session.post(
             f"{HAPPYHUB_API_URL}/upload/complete",
-            json={
-                "storageKey": storage_key,
-                "title": final_title,
-                "description": final_desc,
-                "tags": tags,
-            },
+            json=payload,
             headers={"Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest"},
             timeout=20,
         )
