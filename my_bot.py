@@ -29,6 +29,7 @@ ADMIN_ID        = os.getenv("ADMIN_USER_ID", "1667275809")
 HAPPYHUB_API_URL = os.getenv("HAPPYHUB_API_URL", "https://happy-hub-1tzq.onrender.com/api").rstrip("/")
 HAPPYHUB_EMAIL   = os.getenv("HAPPYHUB_EMAIL", "sopheapsocheat4@gmail.com")
 HAPPYHUB_PASSWORD= os.getenv("HAPPYHUB_PASSWORD", "Password123!")
+BOT_SECRET       = os.getenv("BOT_SECRET", "happyhub_telegram_secret_2026")
 
 if not API_TOKEN:
     raise ValueError("BOT_TOKEN not found!")
@@ -755,6 +756,85 @@ def stats(message):
         f"━━━━━━━━━━━━━━━━",
         parse_mode="Markdown"
     )
+
+
+# ═════════════════════════════════════════════
+#  VIP ORDER ADMIN APPROVAL CALLBACK HANDLER
+# ═════════════════════════════════════════════
+
+@bot.callback_query_handler(func=lambda call: bool(call.data and (call.data.startswith("vip_approve:") or call.data.startswith("vip_reject:"))))
+def handle_vip_approval(call):
+    # Only Admin can approve/reject VIP orders
+    if ADMIN_ID and str(call.from_user.id) != str(ADMIN_ID):
+        bot.answer_callback_query(call.id, "⛔ អ្នកមិនមានសិទ្ធិអនុម័ត VIP ទេ! (Admin Only)", show_alert=True)
+        return
+
+    data = call.data
+    action, _, order_id = data.partition(":")
+    is_approve = (action == "vip_approve")
+
+    endpoint = f"{HAPPYHUB_API_URL}/vip/orders/{order_id}/approve" if is_approve else f"{HAPPYHUB_API_URL}/vip/orders/{order_id}/reject"
+
+    try:
+        res = requests.post(
+            endpoint,
+            headers={
+                "x-bot-secret": BOT_SECRET,
+                "Content-Type": "application/json",
+            },
+            timeout=20,
+        )
+        data_json = res.json() if res.status_code == 200 else {}
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        admin_name = f"@{call.from_user.username}" if call.from_user.username else call.from_user.first_name
+
+        if res.status_code == 200 and data_json.get("success"):
+            if is_approve:
+                msg_status = f"\n\n━━━━━━━━━━━━━━━━\n👑 *APPROVED BY ADMIN ({admin_name})*\n🕐 {now_str}\n🎉 VIP Member Activated!"
+                toast_text = "✅ បានអនុម័ត VIP ជោគជ័យ! User បានឡើង VIP ហើយ។"
+            else:
+                msg_status = f"\n\n━━━━━━━━━━━━━━━━\n❌ *REJECTED BY ADMIN ({admin_name})*\n🕐 {now_str}\n⚠️ Order Rejected."
+                toast_text = "❌ បានបដិសេធ Order VIP នេះរួចរាល់!"
+
+            # Try to edit caption (if photo) or edit text (if message)
+            try:
+                if call.message.caption:
+                    new_caption = call.message.caption + msg_status
+                    bot.edit_message_caption(
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        caption=new_caption,
+                        parse_mode="Markdown",
+                        reply_markup=None,
+                    )
+                else:
+                    new_text = call.message.text + msg_status
+                    bot.edit_message_text(
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        text=new_text,
+                        parse_mode="Markdown",
+                        reply_markup=None,
+                    )
+            except Exception as edit_err:
+                print(f"[EDIT MSG ERROR] {edit_err}")
+                try:
+                    bot.edit_message_reply_markup(
+                        chat_id=call.message.chat.id,
+                        message_id=call.message.message_id,
+                        reply_markup=None,
+                    )
+                except Exception:
+                    pass
+
+            bot.answer_callback_query(call.id, toast_text, show_alert=True)
+        else:
+            err_msg = data_json.get("message") or f"HTTP {res.status_code}"
+            bot.answer_callback_query(call.id, f"⚠️ បរាជ័យ: {err_msg}", show_alert=True)
+    except Exception as ex:
+        print(f"[VIP APPROVAL EXCEPTION] {ex}")
+        bot.answer_callback_query(call.id, f"❌ Error: {str(ex)[:80]}", show_alert=True)
 
 
 # ═════════════════════════════════════════════
