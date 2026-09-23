@@ -805,9 +805,74 @@ def handle_vip_approval(call):
             if is_approve:
                 msg_status = f"\n\n━━━━━━━━━━━━━━━━\n👑 *APPROVED BY ADMIN ({admin_name})*\n🕐 {now_str}\n🎉 VIP Member Activated!"
                 toast_text = "✅ បានអនុម័ត VIP ជោគជ័យ! User បានឡើង VIP ហើយ។"
+
+                # 🚀 Send Telegram Notification to the User
+                try:
+                    order_info = data_json.get("order", {})
+                    user_info = data_json.get("user", {})
+                    plan_name = order_info.get("plan", "VIP")
+                    trans_id = order_info.get("transactionId") or ""
+
+                    target_chat_id = None
+                    target_username = None
+
+                    # Check if TG: @username was passed in transactionId or user info
+                    if "TG:" in trans_id:
+                        target_username = trans_id.split("TG:")[1].strip().split()[0].lstrip("@").lower()
+                    elif user_info.get("username"):
+                        target_username = user_info.get("username").lstrip("@").lower()
+
+                    if target_username:
+                        for uid, udata in all_users.items():
+                            u_uname = (udata.get("username") or "").lstrip("@").lower()
+                            if u_uname and u_uname == target_username:
+                                target_chat_id = uid
+                                break
+
+                    if target_chat_id:
+                        user_msg = (
+                            f"🎉 *អបអរសាទរ! កញ្ចប់ VIP របស់អ្នកត្រូវបាន Admin អនុម័តជោគជ័យ!*\n"
+                            f"━━━━━━━━━━━━━━━━\n"
+                            f"👑 *កញ្ចប់ VIP:* {plan_name}\n"
+                            f"✨ គណនី HappyHub របស់អ្នកត្រូវបានដំឡើងសិទ្ធិ VIP រួចរាល់ហើយ!\n"
+                            f"🎬 អ្នកអាចចូលទស្សនា និង Download 1080p ដោយឥតដែនកំណត់ឥឡូវនេះ:\n"
+                            f"👉 [ចូលទស្សនា HappyHub](https://happyhub-video.netlify.app)\n"
+                            f"━━━━━━━━━━━━━━━━\n"
+                            f"🙏 សូមអរគុណសម្រាប់ការគាំទ្រ!"
+                        )
+                        bot.send_message(target_chat_id, user_msg, parse_mode="Markdown")
+                        log_vip_action(f"Sent VIP notification to Telegram user {target_chat_id} (@{target_username})")
+                    else:
+                        log_vip_action(f"User @{target_username or 'unknown'} not in all_users or has not started the bot yet")
+                except Exception as notify_user_err:
+                    print(f"[NOTIFY USER ERROR] {notify_user_err}")
+                    log_vip_action(f"Failed to notify user: {notify_user_err}")
+
             else:
                 msg_status = f"\n\n━━━━━━━━━━━━━━━━\n❌ *REJECTED BY ADMIN ({admin_name})*\n🕐 {now_str}\n⚠️ Order Rejected."
                 toast_text = "❌ បានបដិសេធ Order VIP នេះរួចរាល់!"
+
+                try:
+                    order_info = data_json.get("order", {})
+                    trans_id = order_info.get("transactionId") or ""
+                    target_chat_id = None
+                    target_username = None
+                    if "TG:" in trans_id:
+                        target_username = trans_id.split("TG:")[1].strip().split()[0].lstrip("@").lower()
+                    if target_username:
+                        for uid, udata in all_users.items():
+                            if (udata.get("username") or "").lstrip("@").lower() == target_username:
+                                target_chat_id = uid
+                                break
+                    if target_chat_id:
+                        bot.send_message(
+                            target_chat_id,
+                            "❌ *ការស្នើសុំ VIP ត្រូវបានបដិសេធដោយ Admin*\n\n"
+                            "Admin មិនបានរកឃើញទឹកប្រាក់ចូលក្នុងកុង ABA ឬព័ត៌មានមិនត្រឹមត្រូវ។ សូមពិនិត្យឡើងវិញ ឬទាក់ទងមក Admin។",
+                            parse_mode="Markdown"
+                        )
+                except Exception:
+                    pass
 
             # Try to edit caption (if photo) or edit text (if message)
             try:
