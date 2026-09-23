@@ -762,11 +762,21 @@ def stats(message):
 #  VIP ORDER ADMIN APPROVAL CALLBACK HANDLER
 # ═════════════════════════════════════════════
 
+def log_vip_action(text: str):
+    try:
+        with open("bot_vip_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {text}\n")
+    except Exception:
+        pass
+
 @bot.callback_query_handler(func=lambda call: bool(call.data and (call.data.startswith("vip_approve:") or call.data.startswith("vip_reject:"))))
 def handle_vip_approval(call):
+    log_vip_action(f"Callback from user {call.from_user.id} (@{call.from_user.username}): {call.data}")
+
     # Only Admin can approve/reject VIP orders
     if ADMIN_ID and str(call.from_user.id) != str(ADMIN_ID):
-        bot.answer_callback_query(call.id, "⛔ អ្នកមិនមានសិទ្ធិអនុម័ត VIP ទេ! (Admin Only)", show_alert=True)
+        log_vip_action(f"Auth failed: {call.from_user.id} != {ADMIN_ID}")
+        bot.answer_callback_query(call.id, f"⛔ អ្នកមិនមានសិទ្ធិអនុម័ត VIP ទេ! (Your ID: {call.from_user.id})", show_alert=True)
         return
 
     data = call.data
@@ -780,16 +790,18 @@ def handle_vip_approval(call):
             endpoint,
             headers={
                 "x-bot-secret": BOT_SECRET,
+                "X-Requested-With": "XMLHttpRequest",
                 "Content-Type": "application/json",
             },
             timeout=20,
         )
-        data_json = res.json() if res.status_code == 200 else {}
+        data_json = res.json() if res.status_code in (200, 400, 403, 404, 500) else {}
 
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         admin_name = f"@{call.from_user.username}" if call.from_user.username else call.from_user.first_name
 
         if res.status_code == 200 and data_json.get("success"):
+            log_vip_action(f"Successfully processed {action} for order {order_id}")
             if is_approve:
                 msg_status = f"\n\n━━━━━━━━━━━━━━━━\n👑 *APPROVED BY ADMIN ({admin_name})*\n🕐 {now_str}\n🎉 VIP Member Activated!"
                 toast_text = "✅ បានអនុម័ត VIP ជោគជ័យ! User បានឡើង VIP ហើយ។"
@@ -830,10 +842,12 @@ def handle_vip_approval(call):
 
             bot.answer_callback_query(call.id, toast_text, show_alert=True)
         else:
-            err_msg = data_json.get("message") or f"HTTP {res.status_code}"
+            err_msg = data_json.get("message") or data_json.get("error") or f"HTTP {res.status_code}"
+            log_vip_action(f"Failed API call for {order_id} ({res.status_code}): {err_msg}")
             bot.answer_callback_query(call.id, f"⚠️ បរាជ័យ: {err_msg}", show_alert=True)
     except Exception as ex:
         print(f"[VIP APPROVAL EXCEPTION] {ex}")
+        log_vip_action(f"Exception for {order_id}: {ex}")
         bot.answer_callback_query(call.id, f"❌ Error: {str(ex)[:80]}", show_alert=True)
 
 
