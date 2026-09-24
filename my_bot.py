@@ -878,22 +878,38 @@ def handle_vip_approval(call):
             try:
                 if call.message.caption:
                     new_caption = call.message.caption + msg_status
-                    bot.edit_message_caption(
-                        chat_id=call.message.chat.id,
-                        message_id=call.message.message_id,
-                        caption=new_caption,
-                        parse_mode="Markdown",
-                        reply_markup=None,
-                    )
+                    try:
+                        bot.edit_message_caption(
+                            chat_id=call.message.chat.id,
+                            message_id=call.message.message_id,
+                            caption=new_caption,
+                            parse_mode="Markdown",
+                            reply_markup=None,
+                        )
+                    except Exception:
+                        bot.edit_message_caption(
+                            chat_id=call.message.chat.id,
+                            message_id=call.message.message_id,
+                            caption=new_caption,
+                            reply_markup=None,
+                        )
                 else:
                     new_text = call.message.text + msg_status
-                    bot.edit_message_text(
-                        chat_id=call.message.chat.id,
-                        message_id=call.message.message_id,
-                        text=new_text,
-                        parse_mode="Markdown",
-                        reply_markup=None,
-                    )
+                    try:
+                        bot.edit_message_text(
+                            chat_id=call.message.chat.id,
+                            message_id=call.message.message_id,
+                            text=new_text,
+                            parse_mode="Markdown",
+                            reply_markup=None,
+                        )
+                    except Exception:
+                        bot.edit_message_text(
+                            chat_id=call.message.chat.id,
+                            message_id=call.message.message_id,
+                            text=new_text,
+                            reply_markup=None,
+                        )
             except Exception as edit_err:
                 print(f"[EDIT MSG ERROR] {edit_err}")
                 try:
