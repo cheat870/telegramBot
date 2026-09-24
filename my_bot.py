@@ -769,6 +769,12 @@ def log_vip_action(text: str):
     except Exception:
         pass
 
+def safe_answer_cb(call_id: str, text: str = "", show_alert: bool = False):
+    try:
+        bot.answer_callback_query(call_id, text=text, show_alert=show_alert)
+    except Exception as ex_cb:
+        print(f"[CALLBACK ANSWER NOTE] {ex_cb}")
+
 @bot.callback_query_handler(func=lambda call: bool(call.data and (call.data.startswith("vip_approve:") or call.data.startswith("vip_reject:"))))
 def handle_vip_approval(call):
     log_vip_action(f"Callback from user {call.from_user.id} (@{call.from_user.username}): {call.data}")
@@ -776,12 +782,15 @@ def handle_vip_approval(call):
     # Only Admin can approve/reject VIP orders
     if ADMIN_ID and str(call.from_user.id) != str(ADMIN_ID):
         log_vip_action(f"Auth failed: {call.from_user.id} != {ADMIN_ID}")
-        bot.answer_callback_query(call.id, f"⛔ អ្នកមិនមានសិទ្ធិអនុម័ត VIP ទេ! (Your ID: {call.from_user.id})", show_alert=True)
+        safe_answer_cb(call.id, f"⛔ អ្នកមិនមានសិទ្ធិអនុម័ត VIP ទេ! (Your ID: {call.from_user.id})", show_alert=True)
         return
 
     data = call.data
     action, _, order_id = data.partition(":")
     is_approve = (action == "vip_approve")
+
+    # Stop Telegram button spinner immediately
+    safe_answer_cb(call.id, "⏳ កំពុងដំណើរការ...")
 
     endpoint = f"{HAPPYHUB_API_URL}/vip/orders/{order_id}/approve" if is_approve else f"{HAPPYHUB_API_URL}/vip/orders/{order_id}/reject"
 
@@ -874,6 +883,21 @@ def handle_vip_approval(call):
                 except Exception:
                     pass
 
+            # Update inline button to show status on the message
+            try:
+                markup = telebot.types.InlineKeyboardMarkup()
+                if is_approve:
+                    markup.add(telebot.types.InlineKeyboardButton(text="✅ APPROVED (បានអនុម័តរួច)", callback_data="vip_done"))
+                else:
+                    markup.add(telebot.types.InlineKeyboardButton(text="❌ REJECTED (បានបដិសេធ)", callback_data="vip_done"))
+                bot.edit_message_reply_markup(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    reply_markup=markup,
+                )
+            except Exception as markup_err:
+                print(f"[EDIT MARKUP ERROR] {markup_err}")
+
             # Try to edit caption (if photo) or edit text (if message)
             try:
                 if call.message.caption:
@@ -884,16 +908,14 @@ def handle_vip_approval(call):
                             message_id=call.message.message_id,
                             caption=new_caption,
                             parse_mode="Markdown",
-                            reply_markup=None,
                         )
                     except Exception:
                         bot.edit_message_caption(
                             chat_id=call.message.chat.id,
                             message_id=call.message.message_id,
                             caption=new_caption,
-                            reply_markup=None,
                         )
-                else:
+                elif call.message.text:
                     new_text = call.message.text + msg_status
                     try:
                         bot.edit_message_text(
@@ -901,35 +923,25 @@ def handle_vip_approval(call):
                             message_id=call.message.message_id,
                             text=new_text,
                             parse_mode="Markdown",
-                            reply_markup=None,
                         )
                     except Exception:
                         bot.edit_message_text(
                             chat_id=call.message.chat.id,
                             message_id=call.message.message_id,
                             text=new_text,
-                            reply_markup=None,
                         )
             except Exception as edit_err:
                 print(f"[EDIT MSG ERROR] {edit_err}")
-                try:
-                    bot.edit_message_reply_markup(
-                        chat_id=call.message.chat.id,
-                        message_id=call.message.message_id,
-                        reply_markup=None,
-                    )
-                except Exception:
-                    pass
 
-            bot.answer_callback_query(call.id, toast_text, show_alert=True)
+            safe_answer_cb(call.id, toast_text, show_alert=True)
         else:
             err_msg = data_json.get("message") or data_json.get("error") or f"HTTP {res.status_code}"
             log_vip_action(f"Failed API call for {order_id} ({res.status_code}): {err_msg}")
-            bot.answer_callback_query(call.id, f"⚠️ បរាជ័យ: {err_msg}", show_alert=True)
+            safe_answer_cb(call.id, f"⚠️ បរាជ័យ: {err_msg}", show_alert=True)
     except Exception as ex:
         print(f"[VIP APPROVAL EXCEPTION] {ex}")
         log_vip_action(f"Exception for {order_id}: {ex}")
-        bot.answer_callback_query(call.id, f"❌ Error: {str(ex)[:80]}", show_alert=True)
+        safe_answer_cb(call.id, f"❌ Error: {str(ex)[:80]}", show_alert=True)
 
 
 # ═════════════════════════════════════════════
