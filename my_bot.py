@@ -11,6 +11,8 @@ from yt_dlp import YoutubeDL
 from typing import Any
 from dotenv import load_dotenv
 from datetime import datetime
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -47,6 +49,29 @@ try:
     ADMIN_ID = int(ADMIN_ID) if ADMIN_ID else None
 except ValueError:
     ADMIN_ID = None
+
+# Cloud Health Check Server for Render / Koyeb Web Services
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"OK - HappyHub Telegram Bot is running 24/7!")
+    def log_message(self, format, *args):
+        pass
+
+def start_health_server():
+    port_str = os.getenv("PORT")
+    if port_str:
+        try:
+            port = int(port_str)
+            server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+            print(f"🌐 Cloud Web Service Health Check listening on 0.0.0.0:{port}")
+            server.serve_forever()
+        except Exception as e:
+            print(f"[HEALTH SERVER ERROR] {e}")
+
+threading.Thread(target=start_health_server, daemon=True).start()
 
 bot = telebot.TeleBot(API_TOKEN)
 telebot.apihelper.READ_TIMEOUT = 600
