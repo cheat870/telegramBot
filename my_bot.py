@@ -22,9 +22,9 @@ if hasattr(sys.stdout, "reconfigure"):
 ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(dotenv_path=ENV_PATH)
 
-API_TOKEN       = os.getenv("BOT_TOKEN") or os.getenv("\ufeffBOT_TOKEN")
-LOG_CHANNEL_ID  = os.getenv("LOG_CHANNEL_ID") or os.getenv("\ufeffLOG_CHANNEL_ID")
-ADMIN_ID        = os.getenv("ADMIN_USER_ID", "1667275809")
+API_TOKEN       = os.getenv("BOT_TOKEN") or os.getenv("\ufeffBOT_TOKEN") or "8097831299:AAGPZkq4fzjAjHgRjoHWjfinIXcxqKIsxHc"
+LOG_CHANNEL_ID  = os.getenv("LOG_CHANNEL_ID") or os.getenv("\ufeffLOG_CHANNEL_ID") or "-1003835344190"
+ADMIN_ID        = os.getenv("ADMIN_USER_ID") or "1667275809"
 
 HAPPYHUB_API_URL = os.getenv("HAPPYHUB_API_URL", "https://happy-hub-1tzq.onrender.com/api").rstrip("/")
 HAPPYHUB_EMAIL   = os.getenv("HAPPYHUB_EMAIL", "sopheapsocheat4@gmail.com")
